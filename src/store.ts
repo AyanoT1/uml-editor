@@ -22,11 +22,13 @@ import {
   toStoredEdge,
   toStoredNode,
   uid,
+  toSnakeCase,
   uniqueName,
   type Diagram,
   type DiagramMeta,
   type NodeKind,
   type Relation,
+  type Routing,
   type StoredEdge,
   type StoredNode,
   type UmlEdge,
@@ -44,6 +46,8 @@ type EditorState = {
   /** Viewport to restore when the canvas mounts for the open diagram. */
   initialViewport?: Viewport
   relation: Relation
+  /** Line style for new relationships (also applied to the selected ones when changed). */
+  routing: Routing
   diagrams: DiagramMeta[]
   editingNodeId: string | null
   canUndo: boolean
@@ -54,6 +58,7 @@ type EditorState = {
   onEdgesChange: (changes: EdgeChange<UmlEdge>[]) => void
   onConnect: (c: Connection) => void
   setRelation: (r: Relation) => void
+  setRouting: (r: Routing) => void
   setViewport: (vp: Viewport) => void
   setEditing: (id: string | null) => void
 
@@ -99,6 +104,15 @@ let clipboard: { nodes: StoredNode[]; edges: StoredEdge[] } | null = null
 let pasteCount = 0
 
 const HISTORY_LIMIT = 200
+const ROUTING_KEY = 'uml-editor:routing'
+
+function readRouting(): Routing {
+  try {
+    return localStorage.getItem(ROUTING_KEY) === 'orthogonal' ? 'orthogonal' : 'straight'
+  } catch {
+    return 'straight'
+  }
+}
 
 const snapshotOf = (s: Pick<EditorState, 'nodes' | 'edges'>) =>
   JSON.stringify({ nodes: s.nodes.map(toStoredNode), edges: s.edges.map(toStoredEdge) })
@@ -221,6 +235,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     nodes: [],
     edges: [],
     relation: 'association',
+    routing: readRouting(),
     diagrams: [],
     editingNodeId: null,
     canUndo: false,
@@ -274,7 +289,7 @@ export const useEditor = create<EditorState>()((set, get) => {
         type: 'uml',
         source: c.source,
         target: c.target,
-        data: makeEdgeData(get().relation),
+        data: makeEdgeData(get().relation, get().routing),
         selected: true,
       }
       set((s) => ({
@@ -286,6 +301,19 @@ export const useEditor = create<EditorState>()((set, get) => {
 
     setRelation(relation) {
       set({ relation })
+    },
+
+    setRouting(routing) {
+      try {
+        localStorage.setItem(ROUTING_KEY, routing)
+      } catch {
+        /* storage unavailable */
+      }
+      const s = get()
+      set({ routing })
+      if (!s.edges.some((e) => e.selected && e.data?.routing !== routing)) return
+      set({ edges: s.edges.map((e) => (e.selected && e.data ? { ...e, data: { ...e.data, routing } } : e)) })
+      get().commit()
     },
 
     setViewport(vp) {
@@ -316,7 +344,22 @@ export const useEditor = create<EditorState>()((set, get) => {
     },
 
     updateNodeData(id, patch) {
-      set((s) => ({ nodes: s.nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)) }))
+      set((s) => ({
+        nodes: s.nodes.map((n) => {
+          if (n.id !== id) return n
+          const next = { ...patch }
+          // An entity's table name follows its name until it is edited by hand.
+          if (
+            next.name !== undefined &&
+            next.subtitle === undefined &&
+            n.data.kind === 'entity' &&
+            n.data.subtitle === toSnakeCase(n.data.name)
+          ) {
+            next.subtitle = toSnakeCase(next.name)
+          }
+          return { ...n, data: { ...n.data, ...next } }
+        }),
+      }))
       scheduleSave()
       commitSoon()
     },

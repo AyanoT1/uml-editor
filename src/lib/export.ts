@@ -85,7 +85,7 @@ export function toMermaid(d: Diagram) {
     const id = mermaidId(n, ids)
     const label = id === n.data.name ? '' : `[${quote(n.data.name)}]`
     lines.push(`  class ${id}${label} {`)
-    const stereo = stereotypeOf(n.data)
+    const stereo = stereotypeOf(n.data) || (n.data.kind === 'entity' ? n.data.subtitle.trim() : '')
     if (stereo) lines.push(`    <<${stereo}>>`)
     if (n.data.kind === 'abstract' && !stereo) lines.push('    <<abstract>>')
     for (const m of [...memberLines(n.data.attributes), ...memberLines(n.data.methods)]) {

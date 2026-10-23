@@ -57,6 +57,96 @@ export function routeEdge(a: Rect, b: Rect, selfLoop: boolean, index: number, co
   return [exitPoint(pa, pb, a), exitPoint(pb, pa, b)]
 }
 
+/**
+ * Right-angled route between two node rectangles: a straight horizontal/vertical run when the
+ * boxes face each other, an L when they are diagonal, a Z when they only barely overlap on one
+ * axis. Falls back to the straight route when the rectangles overlap.
+ */
+export function routeOrthogonal(
+  a: Rect,
+  b: Rect,
+  selfLoop: boolean,
+  index: number,
+  count: number,
+  canonical: boolean,
+  obstacles: Rect[] = [],
+): Point[] {
+  if (selfLoop) return routeEdge(a, b, true, index, count, canonical)
+  const off = (index - (count - 1) / 2) * 16 * (canonical ? 1 : -1)
+  const ca = center(a)
+  const cb = center(b)
+  const right = b.x > a.x + a.w // b entirely to the right of a
+  const left = b.x + b.w < a.x
+  const below = b.y > a.y + a.h
+  const above = b.y + b.h < a.y
+  const yLo = Math.max(a.y, b.y)
+  const yHi = Math.min(a.y + a.h, b.y + b.h)
+  const xLo = Math.max(a.x, b.x)
+  const xHi = Math.min(a.x + a.w, b.x + b.w)
+  const clamp = (v: number, lo: number, hi: number) => Math.min(hi - 6, Math.max(lo + 6, v))
+  const MIN_OVERLAP = 24
+
+  if ((right || left) && yHi - yLo >= MIN_OVERLAP) {
+    const y = clamp((yLo + yHi) / 2 + off, yLo, yHi)
+    return right ? [{ x: a.x + a.w, y }, { x: b.x, y }] : [{ x: a.x, y }, { x: b.x + b.w, y }]
+  }
+  if ((above || below) && xHi - xLo >= MIN_OVERLAP) {
+    const x = clamp((xLo + xHi) / 2 + off, xLo, xHi)
+    return below ? [{ x, y: a.y + a.h }, { x, y: b.y }] : [{ x, y: a.y }, { x, y: b.y + b.h }]
+  }
+  if ((right || left) && (above || below)) {
+    // L: either leave sideways and enter from the top/bottom, or the reverse. Prefer the one
+    // that crosses fewer other nodes (sideways-first on a tie).
+    const ya = clamp(ca.y + off, a.y, a.y + a.h)
+    const xb = clamp(cb.x + off, b.x, b.x + b.w)
+    const sideways = [
+      { x: right ? a.x + a.w : a.x, y: ya },
+      { x: xb, y: ya },
+      { x: xb, y: below ? b.y : b.y + b.h },
+    ]
+    const xa = clamp(ca.x + off, a.x, a.x + a.w)
+    const yb = clamp(cb.y + off, b.y, b.y + b.h)
+    const vertical = [
+      { x: xa, y: below ? a.y + a.h : a.y },
+      { x: xa, y: yb },
+      { x: right ? b.x : b.x + b.w, y: yb },
+    ]
+    return crossings(vertical, obstacles) < crossings(sideways, obstacles) ? vertical : sideways
+  }
+  if (right || left) {
+    const ya = clamp(ca.y + off, a.y, a.y + a.h)
+    const yb = clamp(cb.y + off, b.y, b.y + b.h)
+    const x0 = right ? a.x + a.w : a.x
+    const x1 = right ? b.x : b.x + b.w
+    const mx = (x0 + x1) / 2
+    return [{ x: x0, y: ya }, { x: mx, y: ya }, { x: mx, y: yb }, { x: x1, y: yb }]
+  }
+  if (above || below) {
+    const xa = clamp(ca.x + off, a.x, a.x + a.w)
+    const xb = clamp(cb.x + off, b.x, b.x + b.w)
+    const y0 = below ? a.y + a.h : a.y
+    const y1 = below ? b.y : b.y + b.h
+    const my = (y0 + y1) / 2
+    return [{ x: xa, y: y0 }, { x: xa, y: my }, { x: xb, y: my }, { x: xb, y: y1 }]
+  }
+  return routeEdge(a, b, false, index, count, canonical)
+}
+
+function segmentHitsRect(p: Point, q: Point, r: Rect) {
+  // Segments here are axis-aligned, so an interval overlap test is exact.
+  const x0 = Math.min(p.x, q.x)
+  const x1 = Math.max(p.x, q.x)
+  const y0 = Math.min(p.y, q.y)
+  const y1 = Math.max(p.y, q.y)
+  return x1 > r.x && x0 < r.x + r.w && y1 > r.y && y0 < r.y + r.h
+}
+
+function crossings(pts: Point[], obstacles: Rect[]) {
+  let n = 0
+  for (const r of obstacles) if (pts.some((p, i) => i > 0 && segmentHitsRect(pts[i - 1], p, r))) n++
+  return n
+}
+
 export function unit(from: Point, to: Point): Point {
   const dx = to.x - from.x
   const dy = to.y - from.y

@@ -8,8 +8,11 @@ site is fully static and is deployed to GitHub Pages.
 ## Features
 
 - Classes, abstract classes, interfaces, enumerations and notes on an infinite, zoomable canvas
+- Entities (tables) for data models: a name, the SQL table name as a subtitle, and a plain
+  monospace column list — no operations
 - All seven class-diagram relationships: association, directed association, inheritance, realization,
-  dependency, aggregation and composition — with labels and multiplicities at both ends
+  dependency, aggregation and composition — with labels, a reading-direction arrow (`posee ▸`) and
+  multiplicities at both ends, drawn as straight or right-angle lines
 - Inline editing (double-click), plus a properties panel; members support visibility (`+ - # ~`),
   `static` (underlined) and `abstract` (italic)
 - Multiple diagrams, autosaved to `localStorage`; undo/redo, copy/paste, duplicate, multi-select

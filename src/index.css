@@ -146,12 +146,15 @@ body {
   --canvas-bg: oklch(0.985 0.002 260);
   --uml-line: #3f3f46;
   --uml-accent: #3b82f6;
+  --uml-mult: #c2410c;
+  --uml-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
 .dark {
   --canvas-bg: oklch(0.18 0.004 260);
   --uml-line: #a1a1aa;
   --uml-accent: #60a5fa;
+  --uml-mult: #fb923c;
 }
 
 .react-flow {
@@ -263,6 +266,36 @@ body {
   padding: 10px 22px 10px 12px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* Entities (tables): left-aligned header with the table name, monospace columns only */
+.uml-entity {
+  min-width: 180px;
+  border-radius: 8px;
+}
+.uml-entity > .uml-header,
+.uml-entity .uml-header {
+  padding: 8px 14px 7px;
+  text-align: left;
+  border-radius: 6.5px 6.5px 0 0;
+}
+.uml-entity .uml-name {
+  font-size: 15px;
+}
+.uml-subtitle {
+  font-family: var(--uml-mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: pre;
+  color: color-mix(in oklch, var(--uml-stroke) 70%, var(--foreground));
+}
+.uml-entity .uml-section {
+  padding: 8px 14px;
+}
+.uml-entity .uml-member {
+  font-family: var(--uml-mono);
+  line-height: 22px;
 }
 
 /* Inline editing */
@@ -389,6 +422,18 @@ textarea.uml-inline-field.uml-note-text {
 .uml-edge-label.is-center {
   pointer-events: all;
   cursor: pointer;
+  color: var(--muted-foreground);
+}
+.uml-edge-label.is-end {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--uml-mult);
+}
+.uml-reading-arrow {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 7px;
+  vertical-align: 1px;
 }
 .uml-edge-label.is-selected {
   color: var(--uml-accent);

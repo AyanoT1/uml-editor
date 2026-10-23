@@ -8,6 +8,9 @@ import {
   FileJson,
   ImageIcon,
   ListOrdered,
+  CornerDownRight,
+  MoveUpRight,
+  Table2,
   Monitor,
   Moon,
   PanelLeft,
@@ -51,8 +54,13 @@ const KIND_ICONS: Record<NodeKind, ReactNode> = {
   abstract: <SquareDashed />,
   interface: <CircleDot />,
   enum: <ListOrdered />,
+  entity: <Table2 />,
   note: <StickyNote />,
 }
+
+// Tooltips overwrite Radix's data-state on the trigger, so style the checked state via aria-checked.
+const TOGGLE_ITEM =
+  'px-1 text-muted-foreground aria-checked:bg-accent aria-checked:text-foreground aria-checked:ring-1 aria-checked:ring-border'
 
 function Tip({ label, shortcut, children }: { label: string; shortcut?: string; children: ReactNode }) {
   return (
@@ -89,9 +97,10 @@ export function Toolbar({
   const name = useEditor((s) => s.name)
   const diagramId = useEditor((s) => s.diagramId)
   const relation = useEditor((s) => s.relation)
+  const routing = useEditor((s) => s.routing)
   const canUndo = useEditor((s) => s.canUndo)
   const canRedo = useEditor((s) => s.canRedo)
-  const { addNode, setRelation, undo, redo, renameDiagram } = useEditor.getState()
+  const { addNode, setRelation, setRouting, undo, redo, renameDiagram } = useEditor.getState()
   const { screenToFlowPosition, getNodes } = useReactFlow()
   const themeMode = useTheme((s) => s.mode)
   const setThemeMode = useTheme((s) => s.setMode)
@@ -145,7 +154,7 @@ export function Toolbar({
           <Tip key={kind} label={`Add ${NODE_KINDS[kind].label.toLowerCase()}`}>
             <Button variant="ghost" size="sm" onClick={() => addAtCenter(kind)} aria-label={`Add ${NODE_KINDS[kind].label}`}>
               {KIND_ICONS[kind]}
-              <span className="hidden xl:inline">{NODE_KINDS[kind].label.replace(' class', '')}</span>
+              <span className="hidden 2xl:inline">{NODE_KINDS[kind].label.replace(/ class| \(table\)/, '')}</span>
             </Button>
           </Tip>
         ))}
@@ -162,12 +171,31 @@ export function Toolbar({
               <ToggleGroupItem
                 value={r}
                 aria-label={RELATIONS[r].label}
-                className="px-1 text-muted-foreground aria-checked:bg-accent aria-checked:text-foreground aria-checked:ring-1 aria-checked:ring-border"
+                className={TOGGLE_ITEM}
               >
                 <RelationIcon relation={r} className="size-auto" />
               </ToggleGroupItem>
             </Tip>
           ))}
+        </ToggleGroup>
+        <Separator orientation="vertical" className="mx-1 !h-6" />
+        <ToggleGroup
+          type="single"
+          size="sm"
+          value={routing}
+          aria-label="Line style"
+        >
+          {/* onClick rather than onValueChange: re-clicking the active style still applies it to the selection. */}
+          <Tip label="Straight lines" shortcut="new + selected">
+            <ToggleGroupItem value="straight" aria-label="Straight lines" className={TOGGLE_ITEM} onClick={() => setRouting('straight')}>
+              <MoveUpRight />
+            </ToggleGroupItem>
+          </Tip>
+          <Tip label="Right-angle lines" shortcut="new + selected">
+            <ToggleGroupItem value="orthogonal" aria-label="Right-angle lines" className={TOGGLE_ITEM} onClick={() => setRouting('orthogonal')}>
+              <CornerDownRight />
+            </ToggleGroupItem>
+          </Tip>
         </ToggleGroup>
         <Separator orientation="vertical" className="mx-1 !h-6" />
         <Tip label="Undo" shortcut={`${MOD}Z`}>

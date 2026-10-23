@@ -1,13 +1,26 @@
-import { ArrowLeftRight, Copy, Trash2 } from 'lucide-react'
+import { ArrowLeftRight, Copy, CornerDownRight, MoveUpRight, Trash2 } from 'lucide-react'
 import { cn } from 'cn'
 import type { ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { COLORS, NODE_KINDS, RELATIONS, type ColorKey, type NodeKind, type Relation, type UmlEdge, type UmlNode } from '@/lib/uml'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import {
+  COLORS,
+  NODE_KINDS,
+  RELATIONS,
+  toSnakeCase,
+  type ColorKey,
+  type NodeKind,
+  type Relation,
+  type Routing,
+  type UmlEdge,
+  type UmlNode,
+} from '@/lib/uml'
 import { useEditor } from '@/store'
 import { RelationIcon } from './RelationIcon'
 import { MOD } from '@/lib/platform'
@@ -82,6 +95,7 @@ function NodeInspector({ node }: { node: UmlNode }) {
   const d = node.data
   const set = (patch: Partial<typeof d>) => update(node.id, patch)
   const isNote = d.kind === 'note'
+  const isEntity = d.kind === 'entity'
 
   return (
     <>
@@ -90,7 +104,11 @@ function NodeInspector({ node }: { node: UmlNode }) {
           <Select
             value={d.kind}
             onValueChange={(v) => {
-              set({ kind: v as NodeKind, ...(v === 'note' && !d.text ? { text: d.name } : {}) })
+              set({
+                kind: v as NodeKind,
+                ...(v === 'note' && !d.text ? { text: d.name } : {}),
+                ...(v === 'entity' && !d.subtitle ? { subtitle: toSnakeCase(d.name) } : {}),
+              })
               commit()
             }}
           >
@@ -115,25 +133,42 @@ function NodeInspector({ node }: { node: UmlNode }) {
             <Field label="Name" htmlFor="node-name">
               <Input id="node-name" value={d.name} onChange={(e) => set({ name: e.target.value })} />
             </Field>
-            <Field label="Stereotype" htmlFor="node-stereo">
-              <Input
-                id="node-stereo"
-                value={d.stereotype}
-                placeholder={NODE_KINDS[d.kind].stereotype ?? 'e.g. entity, service'}
-                onChange={(e) => set({ stereotype: e.target.value })}
-              />
-            </Field>
-            <Field label={d.kind === 'enum' ? 'Literals' : 'Attributes'} htmlFor="node-attrs" hint={d.kind === 'enum' ? undefined : MEMBER_HINT}>
+            {isEntity ? (
+              <Field label="Table name" htmlFor="node-subtitle" hint="Shown under the name. Follows the name until you edit it.">
+                <Input
+                  id="node-subtitle"
+                  value={d.subtitle}
+                  placeholder="table_name"
+                  className="font-mono"
+                  spellCheck={false}
+                  onChange={(e) => set({ subtitle: e.target.value })}
+                />
+              </Field>
+            ) : (
+              <Field label="Stereotype" htmlFor="node-stereo">
+                <Input
+                  id="node-stereo"
+                  value={d.stereotype}
+                  placeholder={NODE_KINDS[d.kind].stereotype ?? 'e.g. entity, service'}
+                  onChange={(e) => set({ stereotype: e.target.value })}
+                />
+              </Field>
+            )}
+            <Field
+              label={isEntity ? 'Columns' : d.kind === 'enum' ? 'Literals' : 'Attributes'}
+              htmlFor="node-attrs"
+              hint={isEntity ? 'One per line, shown as written, e.g. id uuid v7.' : d.kind === 'enum' ? undefined : MEMBER_HINT}
+            >
               <Textarea
                 id="node-attrs"
                 value={d.attributes}
-                placeholder={d.kind === 'enum' ? 'RED\nGREEN' : '- id: int\n- name: String'}
+                placeholder={isEntity ? 'id uuid\nclient_id\ncreated_at' : d.kind === 'enum' ? 'RED\nGREEN' : '- id: int\n- name: String'}
                 onChange={(e) => set({ attributes: e.target.value })}
-                className="min-h-20 font-mono text-xs"
+                className={cn('font-mono text-xs', isEntity ? 'min-h-32' : 'min-h-20')}
                 spellCheck={false}
               />
             </Field>
-            <Field label="Operations" htmlFor="node-methods">
+            {!isEntity && (<Field label="Operations" htmlFor="node-methods">
               <Textarea
                 id="node-methods"
                 value={d.methods}
@@ -142,7 +177,7 @@ function NodeInspector({ node }: { node: UmlNode }) {
                 className="min-h-20 font-mono text-xs"
                 spellCheck={false}
               />
-            </Field>
+            </Field>)}
           </>
         )}
         <Field label="Color">
@@ -214,9 +249,40 @@ function EdgeInspector({ edge }: { edge: UmlEdge }) {
             <ArrowLeftRight />
           </Button>
         </div>
+        <Field label="Line">
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            value={d.routing}
+            onValueChange={(v) => {
+              if (!v) return
+              set({ routing: v as Routing })
+              commit()
+            }}
+            className="w-full"
+          >
+            <ToggleGroupItem value="straight" className="flex-1">
+              <MoveUpRight /> Straight
+            </ToggleGroupItem>
+            <ToggleGroupItem value="orthogonal" className="flex-1">
+              <CornerDownRight /> Right angles
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </Field>
         <Field label="Label" htmlFor="edge-label">
           <Input id="edge-label" value={d.label} placeholder="e.g. owns" onChange={(e) => set({ label: e.target.value })} />
         </Field>
+        <Label className="flex items-center gap-2 text-sm font-normal">
+          <Checkbox
+            checked={d.readingArrow}
+            onCheckedChange={(v) => {
+              set({ readingArrow: v === true })
+              commit()
+            }}
+          />
+          Show reading direction (▸) after the label
+        </Label>
         <div className="grid grid-cols-2 gap-3">
           <Field label={`At ${names[0]}`} htmlFor="edge-src">
             <Input id="edge-src" list="multiplicities" value={d.sourceLabel} placeholder="0..*" onChange={(e) => set({ sourceLabel: e.target.value })} />

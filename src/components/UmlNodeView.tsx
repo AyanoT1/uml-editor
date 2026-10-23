@@ -15,6 +15,14 @@ function compartments(data: UmlNodeData): Member[][] {
       return attrs.length ? [attrs, methods] : [methods]
     case 'enum':
       return methods.length ? [attrs, methods] : [attrs]
+    case 'entity':
+      // Columns are shown verbatim: no visibility/static/abstract parsing, no operations.
+      return [
+        data.attributes
+          .split('\n')
+          .filter((l) => l.trim() !== '')
+          .map((l) => ({ text: l.trim(), isStatic: false, isAbstract: false })),
+      ]
     default:
       return [attrs, methods]
   }
@@ -51,6 +59,7 @@ function InlineEditor({ id, data }: { id: string; data: UmlNodeData }) {
     }
   }
   const field = 'nodrag nopan nowheel uml-inline-field'
+  const isEntity = data.kind === 'entity'
 
   return (
     <div
@@ -74,25 +83,37 @@ function InlineEditor({ id, data }: { id: string; data: UmlNodeData }) {
           <div className="uml-header">
             <input
               ref={first}
-              className={cn(field, 'uml-name text-center')}
+              className={cn(field, 'uml-name', !isEntity && 'text-center')}
               value={data.name}
               placeholder="Name"
               aria-label="Name"
               onChange={(e) => update(id, { name: e.target.value })}
               onKeyDown={(e) => e.key === 'Enter' && !e.metaKey && !e.ctrlKey && (e.preventDefault(), setEditing(null))}
             />
+            {isEntity && (
+              <input
+                className={cn(field, 'uml-subtitle')}
+                value={data.subtitle}
+                placeholder="table_name"
+                aria-label="Table name"
+                spellCheck={false}
+                onChange={(e) => update(id, { subtitle: e.target.value })}
+                onKeyDown={(e) => e.key === 'Enter' && !e.metaKey && !e.ctrlKey && (e.preventDefault(), setEditing(null))}
+              />
+            )}
           </div>
           <div className="uml-section">
             <textarea
               className={cn(field, 'uml-member')}
               value={data.attributes}
               rows={rows(data.attributes)}
-              placeholder={data.kind === 'enum' ? 'LITERAL' : '- attribute: Type'}
-              aria-label={data.kind === 'enum' ? 'Literals' : 'Attributes'}
+              placeholder={isEntity ? 'id uuid' : data.kind === 'enum' ? 'LITERAL' : '- attribute: Type'}
+              aria-label={isEntity ? 'Columns' : data.kind === 'enum' ? 'Literals' : 'Attributes'}
+              spellCheck={!isEntity}
               onChange={(e) => update(id, { attributes: e.target.value })}
             />
           </div>
-          <div className="uml-section">
+          {!isEntity && (<div className="uml-section">
             <textarea
               className={cn(field, 'uml-member')}
               value={data.methods}
@@ -101,7 +122,7 @@ function InlineEditor({ id, data }: { id: string; data: UmlNodeData }) {
               aria-label="Operations"
               onChange={(e) => update(id, { methods: e.target.value })}
             />
-          </div>
+          </div>)}
         </>
       )}
     </div>
@@ -115,6 +136,7 @@ function ClassBody({ data }: { data: UmlNodeData }) {
       <div className="uml-header">
         {stereo && <div className="uml-stereo">«{stereo}»</div>}
         <div className={cn('uml-name', data.kind === 'abstract' && 'italic')}>{data.name || ' '}</div>
+        {data.kind === 'entity' && data.subtitle && <div className="uml-subtitle">{data.subtitle}</div>}
       </div>
       {compartments(data).map((members, i) => (
         <div key={i} className="uml-section">
@@ -135,7 +157,7 @@ function UmlNodeViewImpl({ id, data, selected }: NodeProps<UmlNode>) {
 
   return (
     <div
-      className={cn('uml-node', data.kind === 'note' ? 'uml-note' : 'uml-class', selected && 'is-selected', editing && 'is-editing')}
+      className={cn('uml-node', data.kind === 'note' ? 'uml-note' : 'uml-class', data.kind === 'entity' && 'uml-entity', selected && 'is-selected', editing && 'is-editing')}
       data-color={data.color}
     >
       {editing ? (

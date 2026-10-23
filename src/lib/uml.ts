@@ -1,6 +1,6 @@
 import type { Edge, Node, Viewport } from '@xyflow/react'
 
-export type NodeKind = 'class' | 'abstract' | 'interface' | 'enum' | 'note'
+export type NodeKind = 'class' | 'abstract' | 'interface' | 'enum' | 'entity' | 'note'
 
 export type Relation =
   | 'association'
@@ -15,9 +15,13 @@ export type ColorKey = 'default' | 'blue' | 'green' | 'yellow' | 'red' | 'purple
 
 export type HeadKind = 'none' | 'arrow' | 'triangle' | 'diamond' | 'filledDiamond'
 
+export type Routing = 'straight' | 'orthogonal'
+
 export type UmlNodeData = {
   kind: NodeKind
   name: string
+  /** Secondary title shown under the name, e.g. the SQL table of an entity. */
+  subtitle: string
   /** Custom stereotype; empty means the kind's default (e.g. «interface»). */
   stereotype: string
   /** One member per line. */
@@ -34,6 +38,9 @@ export type UmlEdgeData = {
   label: string
   sourceLabel: string
   targetLabel: string
+  routing: Routing
+  /** Shows a ▸ next to the label pointing in the direction the name is read (source → target). */
+  readingArrow: boolean
   /** Derived at render time to spread parallel edges apart; never persisted. */
   parallelIndex?: number
   parallelCount?: number
@@ -47,7 +54,7 @@ export type StoredEdge = {
   id: string
   source: string
   target: string
-  data: Pick<UmlEdgeData, 'relation' | 'label' | 'sourceLabel' | 'targetLabel'>
+  data: Pick<UmlEdgeData, 'relation' | 'label' | 'sourceLabel' | 'targetLabel' | 'routing' | 'readingArrow'>
 }
 
 export type Diagram = {
@@ -67,6 +74,7 @@ export const NODE_KINDS: Record<NodeKind, { label: string; base: string; stereot
   abstract: { label: 'Abstract class', base: 'AbstractClass' },
   interface: { label: 'Interface', base: 'Interface', stereotype: 'interface' },
   enum: { label: 'Enumeration', base: 'Enum', stereotype: 'enumeration' },
+  entity: { label: 'Entity (table)', base: 'Entity' },
   note: { label: 'Note', base: 'Note' },
 }
 
@@ -108,6 +116,7 @@ export function makeNodeData(kind: NodeKind, name?: string): UmlNodeData {
   return {
     kind,
     name: kind === 'note' ? '' : (name ?? NODE_KINDS[kind].base),
+    subtitle: kind === 'entity' ? toSnakeCase(name ?? NODE_KINDS[kind].base) : '',
     stereotype: '',
     attributes: '',
     methods: '',
@@ -116,8 +125,20 @@ export function makeNodeData(kind: NodeKind, name?: string): UmlNodeData {
   }
 }
 
-export function makeEdgeData(relation: Relation): UmlEdgeData {
-  return { relation, label: '', sourceLabel: '', targetLabel: '' }
+export function makeEdgeData(relation: Relation, routing: Routing = 'straight'): UmlEdgeData {
+  return { relation, label: '', sourceLabel: '', targetLabel: '', routing, readingArrow: true }
+}
+
+/** `InstallationPosition` → `installation_position` (default SQL table name for an entity). */
+export function toSnakeCase(name: string) {
+  return name
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[^\w]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase()
 }
 
 export function newDiagram(name = 'Untitled diagram'): Diagram {
@@ -135,7 +156,14 @@ export function toStoredEdge(e: UmlEdge): StoredEdge {
     id: e.id,
     source: e.source,
     target: e.target,
-    data: { relation: d.relation, label: d.label, sourceLabel: d.sourceLabel, targetLabel: d.targetLabel },
+    data: {
+      relation: d.relation,
+      label: d.label,
+      sourceLabel: d.sourceLabel,
+      targetLabel: d.targetLabel,
+      routing: d.routing,
+      readingArrow: d.readingArrow,
+    },
   }
 }
 
@@ -177,6 +205,7 @@ export function normalizeDiagram(raw: unknown): Diagram {
       data: {
         kind,
         name: str(data.name),
+        subtitle: str(data.subtitle),
         stereotype: str(data.stereotype),
         attributes: multiline(data.attributes),
         methods: multiline(data.methods),
@@ -198,7 +227,14 @@ export function normalizeDiagram(raw: unknown): Diagram {
       id: typeof e.id === 'string' && e.id ? e.id : uid(),
       source,
       target,
-      data: { relation, label: str(data.label), sourceLabel: str(data.sourceLabel), targetLabel: str(data.targetLabel) },
+      data: {
+        relation,
+        label: str(data.label),
+        sourceLabel: str(data.sourceLabel),
+        targetLabel: str(data.targetLabel),
+        routing: data.routing === 'orthogonal' ? 'orthogonal' : 'straight',
+        readingArrow: data.readingArrow !== false,
+      },
     })
   }
 

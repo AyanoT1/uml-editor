@@ -7,7 +7,7 @@ export function exampleDiagram(): Diagram {
     const n: StoredNode = {
       id: uid(),
       position: { x, y },
-      data: { kind, name: '', stereotype: '', attributes: '', methods: '', text: '', color: 'default', ...data },
+      data: { kind, name: '', subtitle: '', stereotype: '', attributes: '', methods: '', text: '', color: 'default', ...data },
     }
     d.nodes.push(n)
     return n
@@ -17,7 +17,7 @@ export function exampleDiagram(): Diagram {
       id: uid(),
       source: source.id,
       target: target.id,
-      data: { relation, label: '', sourceLabel: '', targetLabel: '', ...labels },
+      data: { relation, label: '', sourceLabel: '', targetLabel: '', routing: 'straight', readingArrow: true, ...labels },
     })
   }
 
