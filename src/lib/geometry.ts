@@ -1,0 +1,107 @@
+import type { HeadKind } from './uml'
+
+export type Point = { x: number; y: number }
+export type Rect = { x: number; y: number; w: number; h: number }
+
+const center = (r: Rect): Point => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 })
+
+function clampIn(p: Point, r: Rect, inset = 6): Point {
+  return {
+    x: Math.min(r.x + r.w - inset, Math.max(r.x + inset, p.x)),
+    y: Math.min(r.y + r.h - inset, Math.max(r.y + inset, p.y)),
+  }
+}
+
+/** Point where the segment from `from` (inside r) towards `toward` leaves rectangle r. */
+function exitPoint(from: Point, toward: Point, r: Rect): Point {
+  const dx = toward.x - from.x
+  const dy = toward.y - from.y
+  if (!dx && !dy) return { ...from }
+  const tx = dx > 0 ? (r.x + r.w - from.x) / dx : dx < 0 ? (r.x - from.x) / dx : Infinity
+  const ty = dy > 0 ? (r.y + r.h - from.y) / dy : dy < 0 ? (r.y - from.y) / dy : Infinity
+  const t = Math.min(tx, ty)
+  return { x: from.x + dx * t, y: from.y + dy * t }
+}
+
+/**
+ * Polyline for an edge between two node rectangles ("floating" edge: it attaches wherever the
+ * line between the centres crosses the borders). Parallel edges between the same pair are offset
+ * perpendicular to each other; `canonical` tells whether source/target are in canonical order so
+ * A→B and B→A edges of the same pair spread to different sides. Self-loops wrap the top-right corner.
+ */
+export function routeEdge(a: Rect, b: Rect, selfLoop: boolean, index: number, count: number, canonical: boolean): Point[] {
+  if (selfLoop) {
+    const s = 28 + index * 16
+    const x0 = a.x + a.w
+    const y0 = a.y + Math.min(22 + index * 10, a.h / 2)
+    const x1 = a.x + a.w - Math.min(32 + index * 12, a.w / 2)
+    return [
+      { x: x0, y: y0 },
+      { x: x0 + s, y: y0 },
+      { x: x0 + s, y: a.y - s },
+      { x: x1, y: a.y - s },
+      { x: x1, y: a.y },
+    ]
+  }
+  const [p, q] = canonical ? [a, b] : [b, a]
+  const cp = center(p)
+  const cq = center(q)
+  const len = Math.hypot(cq.x - cp.x, cq.y - cp.y) || 1
+  const off = (index - (count - 1) / 2) * 20
+  const nx = (-(cq.y - cp.y) / len) * off
+  const ny = ((cq.x - cp.x) / len) * off
+  const ca = center(a)
+  const cb = center(b)
+  const pa = clampIn({ x: ca.x + nx, y: ca.y + ny }, a)
+  const pb = clampIn({ x: cb.x + nx, y: cb.y + ny }, b)
+  return [exitPoint(pa, pb, a), exitPoint(pb, pa, b)]
+}
+
+export function unit(from: Point, to: Point): Point {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const len = Math.hypot(dx, dy) || 1
+  return { x: dx / len, y: dy / len }
+}
+
+export type Head = { d: string; closed: boolean; filled: boolean; lineEnd: Point }
+
+/** Decoration at `tip`, where `dir` is the unit direction of travel into the tip. */
+export function headShape(kind: HeadKind, tip: Point, dir: Point, scale = 1): Head | null {
+  const nx = -dir.y
+  const ny = dir.x
+  const at = (back: number, side: number) => ({
+    x: tip.x - dir.x * back * scale + nx * side * scale,
+    y: tip.y - dir.y * back * scale + ny * side * scale,
+  })
+  const path = (pts: Point[], close: boolean) =>
+    pts.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ') + (close ? ' Z' : '')
+  switch (kind) {
+    case 'triangle':
+      return { d: path([tip, at(16, 8), at(16, -8)], true), closed: true, filled: false, lineEnd: at(16, 0) }
+    case 'arrow':
+      return { d: path([at(13, 7), tip, at(13, -7)], false), closed: false, filled: false, lineEnd: tip }
+    case 'diamond':
+    case 'filledDiamond':
+      return {
+        d: path([tip, at(10, 6), at(20, 0), at(10, -6)], true),
+        closed: true,
+        filled: kind === 'filledDiamond',
+        lineEnd: at(20, 0),
+      }
+    default:
+      return null
+  }
+}
+
+export function polylinePath(pts: Point[]) {
+  return pts.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')
+}
+
+/** Midpoint of the middle segment of a polyline (where the edge's label sits). */
+export function midpoint(pts: Point[]): Point {
+  const i = Math.floor((pts.length - 1) / 2)
+  const a = pts[i]
+  const b = pts[i + 1] ?? a
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+}
